@@ -84,7 +84,7 @@ exports.isValidIsbn = function (str) {
 			}
 		}
 		check = (10 - (sum % 10)) % 10;
-		return (check == str.slice(-1)[0]);
+		return (check == str.slice(-1));
 	}
 	
 	if (str.length == 10) {
@@ -99,7 +99,7 @@ exports.isValidIsbn = function (str) {
 		if (check == 10) {
 			check = 'X';
 		}
-		return (check == str.slice(-1)[0].toUpperCase());
+		return (check == str.slice(-1).toUpperCase());
 	}
 };
 
@@ -115,7 +115,7 @@ exports.isBreakSection = function (lineText) {
 		'tableofcontent',
 		'tableofcontents'
 	];
-	return lineText[0] === lineText[0].toUpperCase() &&
+	return lineText && lineText[0] === lineText[0].toUpperCase() &&
 		breakSections.includes(lineText.replace(/[^A-Za-z]/g, '').toLowerCase());
 };
 

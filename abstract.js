@@ -46,7 +46,7 @@ Abstract.prototype.extractBeforeKeywords = function (page) {
 			if (word1.text.length < 2) continue;
 			for (let word2 of line2.words) {
 				if (word2.text.length < 2) continue;
-				if (word1.font === word2.font) {
+				if (word1.font === word2.font && word1.fontSize === word2.fontSize) {
 					return true
 				}
 			}
@@ -56,8 +56,7 @@ Abstract.prototype.extractBeforeKeywords = function (page) {
 	
 	// Group lines to line blocks. Similarly to lbs.js
 	// but much simpler, optimized for keywords.
-	// Lines must be grouped because keywords sometimes are wrapped
-	// Therefore we need to group them together, but separate from all other text too
+	// Lines must be grouped because keywords can be in multiple lines
 	let lbs = [];
 	
 	for (let line of page.lines) {
@@ -94,29 +93,39 @@ Abstract.prototype.extractBeforeKeywords = function (page) {
 		}
 	}
 	
+	// Loop through all the line blocks until a keywords line is detected
 	for (let i = 1; i < lbs.length; i++) {
 		let lb = lbs[i];
-		if (/(keywords|key words|indexing terms)([: a-z]*),([ a-z]*)/i.test(lb.lines[0].text) &&
-			utils.isUpper(lb.lines[0].text[0])) {
+		
+		// Test if the first line of the block has keywords and starts from an upper case letter
+		if (
+			/(keywords|key words|indexing terms)([: a-z]*),([ a-z]*)/i.test(lb.lines[0].text) &&
+			utils.isUpper(lb.lines[0].text[0])
+		) {
+			// Keywords line block is found therefore the previous line block should be
+			// an abstract
 			let lbPrev = lbs[i - 1];
 			let abstract = '';
+			// Combine all abstract lines
 			for (let line of lbPrev.lines) {
 				abstract += line.text;
+				// If there is a hyphen at the end of line, remove it
 				if (abstract.length && /[-\u2010]$/.test(abstract)) {
 					abstract = abstract.slice(0, -1);
 				}
-				else {
-					if (!XRegExp('\\p{Dash_Punctuation}$').test(abstract)) {
-						abstract += ' ';
-					}
+				// Add a space of there isn't any kind of dash at the end of line
+				else if (!XRegExp('\\p{Dash_Punctuation}$').test(abstract)) {
+					abstract += ' ';
 				}
 			}
 			abstract = abstract.trim();
+			
+			// Return the abstract if it has a proper length, starts with an
+			// upper case letter and finishes with a dot
 			if (
-				abstract.length &&
+				abstract.length > 200 && abstract.length < 3000 &&
 				utils.isUpper(abstract[0]) &&
-				abstract.slice(-1)[0] === '.' &&
-				abstract.length > 200 && abstract.length < 3000
+				abstract.slice(-1) === '.'
 			) {
 				return {yMin: lbPrev.lines[0].yMin, text: abstract};
 			}
@@ -126,8 +135,8 @@ Abstract.prototype.extractBeforeKeywords = function (page) {
 };
 
 /**
- * Extract abstract when there is "Abstract" or "Summary" before it.
- * Currently only one paragraph abstracts are supported.
+ * Extract abstract when there is a title "Abstract" or "Summary" before it.
+ * Currently only single paragraph abstracts are supported
  * @param page
  * @return {*}
  */
@@ -139,16 +148,26 @@ Abstract.prototype.extractSimple = function (page) {
 		for (; line_i < lines.length; line_i++) {
 			let line = lines[line_i];
 			
+			// Stop because keywords are always behind the abstract
 			if (/^(Keyword|KEYWORD|Key Word|Indexing Terms)/.test(line.text)) break;
 			
 			if (utils.isBreakSection(line.text)) break;
 			
+			// Collect lines
 			abstractLines.push(lines[line_i]);
 			
+			// Try to detect if the current line is the last line.
+			// Firstly try to measure if the current line is shorter than all other previous lines.
+			// It happens with justify alignment which is quite common and produces symmetrical columns
 			if (line_i >= 2) {
+				// Right side difference between two previous lines
 				let prevDiff = Math.abs(lines[line_i - 2].xMax - lines[line_i - 1].xMax);
+				// Right side difference between the current and the previous line
 				let curDiff = lines[line_i - 1].xMax - lines[line_i].xMax;
 				
+				// Compare line differences. If two previous lines are in the same line,
+				// then the paragraph has a justify alignment and if the current line
+				// is shorter then it's the last line
 				if (/[\)\.]/.test(lines[line_i].text.slice(-1)) &&
 					line_i - start_i >= 2 &&
 					prevDiff < 1.0 &&
@@ -158,9 +177,10 @@ Abstract.prototype.extractSimple = function (page) {
 				}
 			}
 			
-			if (line_i + 1 === lines.length) break;
-			
-			if (line_i >= 1 && line_i - start_i >= 1) {
+			// If the current line isn't the last line, then compare line spacings
+			// between the two previous lines and the current line. If it's too high
+			// then the current line doesn't belong to the abstract paragraph
+			if (line_i >= 1 && line_i + 1 < lines.length && line_i - start_i >= 1) {
 				let prevGap = lines[line_i].yMin - lines[line_i - 1].yMax;
 				let nextGap = lines[line_i + 1].yMin - lines[line_i].yMax;
 				if (nextGap - prevGap > 5.0) {
@@ -221,15 +241,30 @@ Abstract.prototype.extractSimple = function (page) {
 		// let next_line_x_min = lines[line_i + 1].xMin;
 		//if (Math.abs(line.words[0].yMin-lines[line_i + 1].yMin)>2.0 &&( word_x_max > next_line_x_max || word_x_max < next_line_x_min)) continue;
 		
+		// Find the beginning of an abstract (by title). The abstract begins from line_i
 		let title = getTitle(line);
 		if (title) {
+			// Get all abstract lines (including title) from line_i until the end
 			let abstractLines = getAbstractLines(lines, line_i);
+			
+			// Join abstract lines into a text
 			let text = joinAbstractLines(abstractLines);
+			
+			// Cut the title from the beginning
 			text = text.slice(title.length);
+			
+			// Cut until the first alphanumeric character, to skip various
+			// spaces and dashes between the abstract title and the actual paragraph
 			let j = indexOfFirstAlphaNum(text);
 			text = text.slice(j);
-			if (!text.length) break;
-			if (text[0] !== text[0].toUpperCase()) break;
+			
+			// Abstract len
+			if (text.length < 100 && text.length > 10000) break;
+			
+			// Should start with an uppercase letter
+			if (!utils.isUpper(text[0])) break;
+			
+			// Should end with a dot
 			if (text.slice(-1) !== '.') break;
 			return {yMin: line.yMin, text};
 		}
@@ -237,9 +272,16 @@ Abstract.prototype.extractSimple = function (page) {
 	return null;
 };
 
+/**
+ * Extract an abstract consisting of multiple sections
+ * @param page
+ * @return {*}
+ */
 Abstract.prototype.extractStructured = function (page) {
 	
+	// Try to get title at the beginning of line
 	function getTitle(text) {
+		// Section must start with one of the titles below
 		let names = {
 			'background': 1,
 			'methodology': 2,
@@ -260,6 +302,7 @@ Abstract.prototype.extractStructured = function (page) {
 		let text2 = text.toLowerCase();
 		
 		for (let name in names) {
+			// Title must be at the beginning of the line and have an upper case letter
 			if (text2.indexOf(name) === 0 && utils.isUpper(text[0])) {
 				return names[name];
 			}
@@ -270,6 +313,9 @@ Abstract.prototype.extractStructured = function (page) {
 	function getSections(lines, line_i) {
 		let sectionLines = [];
 		
+		// Anchor word should be the first section title.
+		// All other section titles must be aligned in the same line as the anchor word,
+		// and have the same font and font size
 		let anchorWord = lines[line_i].words[0];
 		
 		let foundTypes = [];
@@ -277,26 +323,30 @@ Abstract.prototype.extractStructured = function (page) {
 		for (; line_i < lines.length; line_i++) {
 			let line = lines[line_i];
 			
+			// Compare with anchor word. Must be aligned and have the same font and font size
 			if (
 				Math.abs(anchorWord.xMin - line.words[0].xMin) > 2.0 ||
 				Math.abs(anchorWord.fontSize - line.words[0].fontSize) > 1.0 ||
 				anchorWord.font !== line.words[0].font
 			) continue;
 			
-			let type = getTitle(line.text);
-			
+			// Skip sections like "Table of contents"
 			if (utils.isBreakSection(line.text)) break;
 			
+			let type = getTitle(line.text);
+			if (!type) continue;
+			
+			// One section can only be found once
 			if (foundTypes.includes(type)) continue;
 			
-			if (type) {
-				foundTypes.push(type);
-				sectionLines.push(line_i);
-			}
+			foundTypes.push(type);
+			sectionLines.push(line_i);
 			
+			// Conclusion section is always the last one
 			if (type === 3) break;
 		}
 		
+		// Should find at least 3 different sections and finish with a conclusion
 		if (foundTypes.length < 3 || foundTypes.slice(-1)[0] !== 3) return null;
 		return sectionLines;
 	}

@@ -50,7 +50,7 @@ Recognizer.prototype.init = async function () {
 	this.extract = new Extract({db: this.db});
 	this.metadata = new Metadata({db: this.db, authors: this.authors});
 	this.abstract = new Abstract();
-	this.page = new Page();
+	this.page = new Page({db: this.db});
 	this.jstor = new Jstor();
 };
 
@@ -81,7 +81,7 @@ Recognizer.prototype.recognize = async function (json) {
 		return result;
 	}
 	
-	// Extract PDF file metadata
+	// Extract PDF file metadata (title, authors, DOI, ISBN)
 	res = await this.metadata.extract(doc);
 	result = Object.assign(result, res);
 	
@@ -176,7 +176,7 @@ Recognizer.prototype.recognize = async function (json) {
 	}
 	
 	// Regex DOI
-	if (!result.doi) {
+	if (!result.doi && !await this.page.hasReferences(doc.pages[0])) {
 		if (res = await this.extract.doi(doc)) result.doi = res;
 	}
 	

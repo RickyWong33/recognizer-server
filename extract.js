@@ -246,7 +246,7 @@ Extract.prototype.keywords = function (doc) {
 			let text = '';
 			for (let line of lb.lines) {
 				text += line.text;
-				if (text.slice(-1)[0] === '-') {
+				if (text.slice(-1) === '-') {
 					text = text.slice(0, -1);
 				}
 				else {

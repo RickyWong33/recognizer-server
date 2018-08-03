@@ -92,7 +92,7 @@ Authors.prototype.isPrefix = function (text) {
  * @return {Array}
  */
 Authors.prototype.extractFromLine = function (line) {
-	let rxToken = XRegExp('(?![Ææ])[\\p{Letter}-’\'. ]');
+	let rxToken = XRegExp('(?![Ææ])[\\p{Letter}\u2011’\'. -]');
 	let rxTrim = XRegExp('^[^\\p{Letter}]+|[^\\p{Letter}’\']+$', 'g');
 	
 	// Walk through the words and make one flat chars array with references to the actual word
@@ -129,6 +129,7 @@ Authors.prototype.extractFromLine = function (line) {
 		}
 		// Split if the previous char has a different font, font size or baseline
 		else if (prevChar && (prevChar.word.font !== char.word.font ||
+			char.word.xMin - prevChar.word.xMax > Math.max(prevChar.word.fontSize, char.word.fontSize) ||
 			Math.abs(char.word.fontSize - prevChar.word.fontSize) > 1.0 &&
 			Math.abs(char.word.baseline - prevChar.word.baseline) > 1.0)) {
 			if (token) {
@@ -182,7 +183,6 @@ Authors.prototype.extractFromLine = function (line) {
 	tokens = tokens.map(x => XRegExp.replace(x, rxTrim, ''));
 	
 	let authors = [];
-	// console.log(tokens);
 	// Split tokens to separate names, validate them and construct authors array
 	for (let token of tokens) {
 		let names = token.split(/[\s\.]/).filter(x => x);
@@ -197,10 +197,11 @@ Authors.prototype.extractFromLine = function (line) {
 			if (names.slice(-1)[0].length < 2) break;
 			authors.push(names.slice());
 		}
-		else if (names.length !== 0 && names.length !== 1) {
-			// Stop further parsing
+		// Stop parsing if more than 4 names found
+		else if (names.length > 4) {
 			break;
 		}
+		// If zero or one name just skip it
 	}
 	
 	return authors;
@@ -218,7 +219,6 @@ Authors.prototype.extractFromStringType1 = async function (chars) {
 	
 	let tokens = [];
 	let token = '';
-	let prevChar = null;
 	for (let char of chars) {
 		if (!rxToken.test(char)) {
 			if (token) {
@@ -229,8 +229,6 @@ Authors.prototype.extractFromStringType1 = async function (chars) {
 		else {
 			token += char;
 		}
-		
-		prevChar = char;
 	}
 	
 	if (token) tokens.push(token);

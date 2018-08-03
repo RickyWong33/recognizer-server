@@ -23,11 +23,12 @@
  ***** END LICENSE BLOCK *****
  */
 
+const XRegExp = require('xregexp');
 const log = require('./log');
 const utils = require('./utils');
 
-const Page = function () {
-	
+const Page = function (options) {
+	this.db = options.db;
 };
 
 module.exports = Page;
@@ -332,4 +333,153 @@ Page.prototype.detectLanguage = async function (doc) {
 	) return lg;
 	
 	return null;
+};
+
+Page.prototype.hasReferences = async function (page) {
+	function hasPattern(words) {
+		words = words.map(x => (parseInt(x).toString() === x ? 0 : 1));
+		
+		words = words.filter((item, pos, arr) => {
+			return pos === 0 || item !== arr[pos - 1];
+		});
+		
+		return words.length >= 7;
+	}
+	
+	function getNumberedLinesCount(lines) {
+		let nums = [];
+		
+		for (let line of lines) {
+			let num = parseInt(line.text, 10);
+			if (num) {
+				nums.push(num)
+			}
+		}
+		
+		let maxLen = 0;
+		
+		for (let i = 0; i < nums.length; i++) {
+			let max = nums[i];
+			if (max > 200) continue;
+			let len = 1;
+			for (let j = 0; j < nums.length; j++) {
+				let num2 = nums[j];
+				if (num2 === max + 1) {
+					max = max + 1;
+					len++;
+				}
+			}
+			
+			if (len > maxLen) {
+				maxLen = len;
+			}
+		}
+		
+		return maxLen;
+	}
+	
+	function getTabsCount(lines) {
+		let xMins = {};
+		
+		let text = '';
+		for (let line of lines) {
+			text += line.text + '\n';
+			xMins[parseInt(line.xMin)] = 1;
+		}
+		return Object.keys(xMins);
+	}
+	
+	function haveIdenticalFontWords(line1, line2) {
+		for (let word1 of line1.words) {
+			if (word1.text.length < 2) continue;
+			for (let word2 of line2.words) {
+				if (word2.text.length < 2) continue;
+				if (word1.font === word2.font && word1.fontSize === word2.fontSize) {
+					return true
+				}
+			}
+		}
+		return false;
+	}
+	
+	function getLineBlocks(page) {
+		// Group lines to line blocks
+		let lbs = [];
+		
+		for (let line of page.lines) {
+			
+			// Line must have words
+			if (!line.words.length) continue;
+			
+			let lastLb = null;
+			let prevWord = null;
+			
+			// Try to get the line (and the last word) from the previous line block
+			if (lbs.length) {
+				lastLb = lbs.slice(-1)[0];
+				let prevLine = lastLb.lines.slice(-1)[0];
+				prevWord = prevLine.words.slice(-1)[0];
+			}
+			
+			// To group this line with the previous line there should be
+			// the same font and size words
+			if (lastLb &&
+				haveIdenticalFontWords(lastLb.lines.slice(-1)[0], line) &&
+				line.yMin - prevWord.yMax < prevWord.fontSize
+			) {
+				lastLb.lines.push(line);
+			}
+			// Or just create a new line block
+			else {
+				lbs.push({
+					lines: [line]
+				});
+			}
+		}
+		
+		return lbs;
+	}
+	
+	let lbs = getLineBlocks(page);
+	
+	for (let lb of lbs) {
+		let tabsCount = getTabsCount(lb.lines);
+		let numberedLinesCount = getNumberedLinesCount(lb.lines);
+		
+		if (numberedLinesCount < 4 && tabsCount !== 2 && tabsCount !== 3) continue;
+		
+		let text = '';
+		for (let line of lb.lines) {
+			text += line.text + '\n';
+		}
+		
+		text = text.replace(/[´\^ˆ¨`˜∼¸]/g, '');
+		
+		let words = XRegExp.split(text, XRegExp('[^\\p{Letter}0-9]'));
+		words = words.filter(x => (
+			x.length === 4 && parseInt(x) >= 1800 && parseInt(x) <= (new Date()).getFullYear() ||
+			!/[0-9]/.test(x) && x.length >= 5 && utils.isUpper(x[0])
+		));
+		
+		if (!hasPattern(words)) continue;
+		
+		let words2 = [];
+		
+		for (let word of words) {
+			if (parseInt(word).toString() === word) {
+				words2.push(word);
+				continue;
+			}
+			let w = await this.db.getWord(word);
+			if (w && (w.c > w.a || w.b > w.a)) {
+				words2.push(word);
+			}
+		}
+		
+		if (hasPattern(words2)) {
+			return true;
+		}
+	}
+	
+	return false;
 };
