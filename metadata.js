@@ -39,7 +39,20 @@ module.exports = Metadata;
  */
 Metadata.prototype.extract = async function (doc) {
 	let result = {};
+	
+	let dois = [];
+	let isbns = [];
+	
 	let normText = utils.normalize(doc.text);
+	
+	// If PDF metadata has a title, validate its authors against two first pages.
+	// We try to avoid references because they contain many author names
+	let normTextAuthors = doc.pages[0].text;
+	if (doc.pages.length >= 2) {
+		normTextAuthors += doc.pages[1].text;
+	}
+	normTextAuthors = utils.normalize(normTextAuthors);
+	
 	for (let key in doc.metadata) {
 		if (key.toLowerCase() === 'title') {
 			let normTitle = utils.normalize(doc.metadata[key]);
@@ -49,17 +62,39 @@ Metadata.prototype.extract = async function (doc) {
 				result.title = doc.metadata[key].trim();
 			}
 			
-			let doi = await this.db.getDoiByTitle(normTitle, normText, true);
-			if (doi) {
+			// Even if metadata has a valid article title, it not always belongs to the current PDF,
+			// therefore we have to validate authors
+			let detection = await this.db.getDoiByNormTitle(normTitle, normTextAuthors, true);
+			if (detection && detection.status === 'single' && detection.authorsDetected) {
 				result.title = doc.metadata[key].trim();
-				result.doi = doi;
+				result.doi = detection.doi;
 			}
 		}
 		
+		// Extract DOIs from every field in PDF metadata. It's not that rare for them
+		// to appear in unexpected places like:
+		// "Keywords": "doi:10.1103/PhysRev.4.345 url:http://dx.doi.org/10.1103/PhysRev.4.345",
+		dois = dois.concat(utils.extractDois(doc.metadata[key]));
+		
+		// If DOI is found in one of the expected fields, just use it
 		if (['doi', 'wps-articledoi'].includes(key.toLowerCase())) {
 			let doi = doc.metadata[key];
 			if (/10.\d{4,9}\/[^\s]*[^\s\.,]/.test(doi)) {
 				result.doi = doi;
+			}
+		}
+		
+		// Extract ISBNs from every field in PDF metadata. It's not that rare for them
+		// to appear in unexpected places like:
+		// "Keywords": "ISBN-13:    9781862391246"
+		isbns = isbns.concat(utils.extractIsbns(doc.metadata[key]));
+		
+		// If ISBN is found in one of the expected fields, just use it
+		if (['isbn'].includes(key.toLowerCase())) {
+			let isbn = doc.metadata[key];
+			isbn = isbn.replace(/[^0-9X]/gi, '');
+			if (isbn.length === 10 || isbn.length === 13) {
+				result.isbn = isbn;
 			}
 		}
 		
@@ -78,14 +113,18 @@ Metadata.prototype.extract = async function (doc) {
 				}
 			}
 		}
-		
-		if (['isbn'].includes(key.toLowerCase())) {
-			let isbn = doc.metadata[key];
-			isbn = isbn.replace(/[^0-9X]/gi, '');
-			if (isbn.length === 10 || isbn.length === 13) {
-				result.isbn = isbn;
-			}
-		}
 	}
+	
+	// Use the unexpected DOI only if it's the only DOI in metadata
+	if (!result.doi && dois.length === 1) {
+		result.doi = dois[0];
+	}
+	
+	
+	// Use the unexpected ISBN only if it's the only ISBN in metadata
+	if (!result.isbn && isbns.length === 1) {
+		result.isbn = isbns[0];
+	}
+	
 	return result;
 };

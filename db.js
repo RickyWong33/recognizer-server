@@ -79,15 +79,17 @@ Db.prototype.getWord = async function (word) {
 };
 
 /**
- * Resolves title to DOI and validates authors
- * Database only keeps author last name hash and length
+ * Resolves title to DOI and validates authors.
+ * Database only keeps author last name hash and length.
+ *
+ * We want to do as little as possible doidata data queries,
+ * because there is a limit of queries per second, which depends on
+ * disk I/O
  * @param title
  * @param text
- * @param validateAuthor
  * @return {Promise<*>}
  */
-// TODO: check first letter case
-Db.prototype.getDoiByTitle = async function (title, text, validateAuthor) {
+Db.prototype.getDoiByNormTitle = async function (title, text) {
 	let title_hash = XXHash.hash64(new Buffer(title), 0, 'buffer');
 	title_hash = Int64LE(title_hash).toString();
 	
@@ -99,33 +101,37 @@ Db.prototype.getDoiByTitle = async function (title, text, validateAuthor) {
 	let row2 = await stmt.get();
 	
 	// If more than one row encountered we can't reliably distinguish which one is the right one,
-	// therefore it's better to avoid resolving this title to DOI
+	// therefore it's better to avoid resolving this title to DOI. But it's still important to inform
+	// the caller that the title was found in database
 	// Todo: But it's possible to utilize the detected title for title extraction
 	if (row2) {
-		return null;
+		return {status: 'multi', title};
 	}
 	
-	// If title validation is not required, title must be long enough
-	if (title.length >= 50 && !validateAuthor) return row1.doi;
+	let authorsCount = 0;
+	let authorsDetected = 0;
 	
-	let foundAuthor1 = false;
-	let foundAuthor2 = false;
-	
-	// Find authors in text
-	// Too short author names can have too many false positives
-	if (row1.author1_len >= 4) foundAuthor1 = this.findAuthor(text, row1.author1_hash, row1.author1_len);
-	if (row1.author2_len >= 4) foundAuthor2 = this.findAuthor(text, row1.author2_hash, row1.author2_len);
-	
-	// If title is short, it should match all provided authors
-	if (title.length < 30) {
-		if (foundAuthor1 && (row1.author2_len < 4 || foundAuthor2)) return row1.doi;
-	}
-	// Otherwise only one author is necessary
-	else {
-		if (foundAuthor1 || foundAuthor2) return row1.doi;
+	if (row1.author1_len >= 4) {
+		authorsCount++;
+		if (this.findAuthor(text, row1.author1_hash, row1.author1_len)) {
+			authorsDetected++;
+		}
 	}
 	
-	return null;
+	if (row1.author2_len >= 4) {
+		authorsCount++;
+		if (this.findAuthor(text, row1.author2_hash, row1.author2_len)) {
+			authorsDetected++;
+		}
+	}
+	
+	return {
+		status: 'single',
+		title,
+		doi: row1.doi,
+		authorsCount,
+		authorsDetected
+	};
 };
 
 /**

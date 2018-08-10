@@ -103,6 +103,24 @@ exports.isValidIsbn = function (str) {
 	}
 };
 
+// From http://www.dispersiondesign.com/articles/isbn/converting_isbn10_to_isbn13
+exports.convertISBN10 = function (isbn10) {
+	let chars = isbn10.split("");
+	chars.unshift("9", "7", "8");
+	chars.pop();
+	
+	let i = 0;
+	let sum = 0;
+	for (i = 0; i < 12; i += 1) {
+		sum += chars[i] * ((i % 2) ? 3 : 1);
+	}
+	let check_digit = (10 - (sum % 10)) % 10;
+	chars.push(check_digit);
+	
+	let isbn13 = chars.join("");
+	return isbn13;
+};
+
 exports.isUpper = function (c) {
 	if (!c) return false;
 	return c === c.toString().toUpperCase() && XRegExp('\\p{Letter}').test(c)
@@ -136,4 +154,91 @@ exports.getTopValue = function (items) {
 		}
 	}
 	return top;
+};
+
+exports.extractIsbns = function (text) {
+	let isbns = [];
+	let rx = /(SBN|sbn)[ \u2014\u2013\u2012-]?(10|13)?[: ]*([0-9X][0-9X \u2014\u2013\u2012-]+)/g;
+	let m;
+	while (m = rx.exec(text)) {
+		let isbn = m[3].replace(/[^0-9X]/gi, '');
+		
+		// If ISBN-10 or ISBN-13 is found
+		if (isbn.length === 10 || isbn.length === 13) {
+			isbns.push(isbn);
+			continue;
+		}
+		
+		// Sometimes ISBNs aren't separated with a space
+		// If two ISBN-10 or two ISBN-13 detected
+		if (isbn.length === 20 || isbn.length === 26) {
+			// Just slice the first one
+			isbns.push(isbn.slice(0, isbn.length / 2));
+			continue;
+		}
+		
+		// If a mixed ISBN-10 and ISBN-13 pair found, we don't know what is the length of the first one
+		if (isbn.length === 23) {
+			// Slice both ISBNs, validate, and one of them should be correct
+			let isbn13 = isbn.slice(0, 13);
+			let isbn10 = isbn.slice(0, 10);
+			if (utils.isValidIsbn(isbn13)) isbns.push(isbn13);
+			if (utils.isValidIsbn(isbn10)) isbns.push(isbn10);
+		}
+	}
+	
+	let isbns2 = new Set();
+	for (let isbn of isbns) {
+		if (isbn.length === 10) {
+			isbn = exports.convertISBN10(isbn);
+		}
+		isbns2.add(isbn);
+	}
+	return Array.from(isbns2);
+};
+
+/**
+ * Sometimes DOI extraction results in an incorrect DOI because
+ * it was in round or square brackets. But DOI can have brackets too.
+ * This function analyses opening and closing brackets and detects
+ * where is the actual end of the DOI
+ * i.e "(10.1016/s1474-5151(03)00108-7)" is extracted as "10.1016/s1474-5151(03)00108-7)"
+ * and this functions fixes it to "10.1016/s1474-5151(03)00108-7"
+ * @param text
+ * @return {string}
+ */
+exports.cleanInvalidParentheses = function (text) {
+	let text2 = '';
+	let depth = 0;
+	for (let c of text) {
+		if ([']', ')'].includes(c)) {
+			depth--;
+			if (depth < 0) break;
+		}
+		if (['[', '('].includes(c)) {
+			depth++;
+		}
+		text2 += c;
+	}
+	return text2;
+};
+
+exports.extractDois = function (text) {
+	let dois = new Set();
+	
+	let m = text.match(/10.\d{4,9}\/[^\s]*[^\s\.,]/g);
+	if (!m) return [];
+	
+	for (let doi of m) {
+		// Clean "10.1016/s1474-5151(03)00108-7)"
+		doi = exports.cleanInvalidParentheses(doi);
+		
+		// ASCII letters in DOI are case insensitive
+		doi = doi.split('').map(c => (c >= 'A' && c <= 'Z') ? c.toLowerCase() : c).join('');
+		
+		// Deduplicate DOIs
+		dois.add(doi);
+	}
+	
+	return Array.from(dois);
 };

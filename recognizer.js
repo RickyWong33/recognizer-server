@@ -85,7 +85,7 @@ Recognizer.prototype.recognize = async function (json) {
 	res = await this.metadata.extract(doc);
 	result = Object.assign(result, res);
 	
-	if (res = this.extract.isbn(doc.text)) result.isbn = res;
+	if (!result.isbn && (res = this.extract.isbn(doc.text))) result.isbn = res;
 	if (res = this.extract.arxiv(doc.pages[0].text)) result.arxiv = res;
 	if (res = this.extract.issn(doc.text)) result.issn = res;
 	
@@ -175,10 +175,14 @@ Recognizer.prototype.recognize = async function (json) {
 		if (res = await this.title.findDoiByTitle(doc, breakLine)) result.doi = res;
 	}
 	
-	// Regex DOI
+	// Regex DOI, but make sure the page doesn't have references
 	if (!result.doi && !await this.page.hasReferences(doc.pages[0])) {
 		if (res = await this.extract.doi(doc)) result.doi = res;
 	}
+	
+	// If the PDF is an article (has an abstract), it's better to avoid ISBNs, because
+	// they often link to proceedings.
+	if (result.isbn && result.abstract) result.isbn = undefined;
 	
 	return result;
 };

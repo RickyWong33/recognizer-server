@@ -105,7 +105,7 @@ Title.prototype.wordsCount = function (title) {
  * @return {string}
  */
 Title.prototype.cleanTitle = function (title) {
-	return title.replace(/[*|∗|⁎|†|‡|§|¶|⊥|¹|1|α|β|λ|ξ|ψ]$/, '');
+	return title.replace(/[*∗⁎†‡§¶⊥¹1αβλξψ]$/, '');
 };
 
 /**
@@ -161,7 +161,7 @@ Title.prototype.getTitleAndAuthors = async function (page, breakPageY) {
 		}
 	}
 	
-	// Try unsorted line blocks, but only for uppercase titles
+	// Try in the order they appear in the page, but only for uppercase titles
 	for (let i = 0; i < lbs.length; i++) {
 		let tlb = lbs[i];
 		
@@ -226,14 +226,14 @@ Title.prototype.lineBlockToText = function (lb, m) {
 };
 
 /**
- * Resolve title to DOI
- * Loops through line blocks, normalizes, calculates hash and tries to find DOI in database
+ * Resolve title to DOI.
+ * Loops through line blocks, normalizes, calculates hash and tries to find DOI in database.
+ * It's important to do as little as possible db queries
+ * @param doc
+ * @param breakLine
+ * @return {Promise<null|string>}
  */
 Title.prototype.findDoiByTitle = async function (doc, breakLine) {
-	let count = 0;
-	
-	let normText = utils.normalize(doc.text);
-	
 	let pages = doc.pages;
 	
 	// Tries to resolve DOI only in first two pages
@@ -241,36 +241,29 @@ Title.prototype.findDoiByTitle = async function (doc, breakLine) {
 		let page = pages[pageIndex];
 		let lbs = page.lbs;
 		
-		if (breakLine && pageIndex > breakLine.pageIndex) break;
+		let normTitles = new Set();
 		
-		let foundDois = [];
+		if (breakLine && pageIndex > breakLine.pageIndex) break;
 		
 		for (let i = 0; i < lbs.length; i++) {
 			let lb = lbs[i];
 			
 			if (breakLine && pageIndex === breakLine.pageIndex && lb.yMin >= breakLine.pageY) continue;
 			
-			let title = this.lineBlockToText(lb, 0);
-			if (count > 100) break;
-			
+			// Tries: line, line + next line, and repeats
 			for (let m = 0; m < lb.lines.length && m < 2; m++) {
 				if (lb.lines.length - m > 7) continue;
 				let title = this.lineBlockToText(lb, m);
 				let normTitle = utils.normalize(title);
 				if (normTitle.length < 15 || normTitle.length > 300) continue;
-				count++;
-				let doi = await this.db.getDoiByTitle(normTitle, normText);
-				if (doi) {
-					foundDois.push(doi);
-					if (foundDois.length >= 2) return null;
-				}
+				normTitles.add(normTitle);
 			}
 			
 			// Try to combine title from two line blocks. Useful when:
 			// 1) Line grouping to blocks fails (in lbs.js) and title
-			// becomes separated into two line blocks
+			//    becomes separated into two line blocks
 			// 2) There is a subtitle which must be included to title because
-			// in our database it exist in full name (title+subtitle)
+			//    in doidata they are concatenated (title+subtitle)
 			if (i + 1 < lbs.length) {
 				let curLb = lbs[i];
 				let nextLb = lbs[i + 1];
@@ -286,16 +279,75 @@ Title.prototype.findDoiByTitle = async function (doc, breakLine) {
 				let normTitle = utils.normalize(title);
 				if (normTitle.length < 15 || normTitle.length > 300) continue;
 				
-				count++;
-				let doi = await this.db.getDoiByTitle(normTitle, normText);
-				if (doi) {
-					foundDois.push(doi);
-					if (foundDois.length >= 2) return null;
-				}
+				normTitles.add(normTitle);
 			}
-			
 		}
-		if (foundDois.length) return foundDois[0];
+		
+		// 100 titles in one PDF page means the PDF text is totally broken
+		if (normTitles.length > 100) return false;
+		
+		// Normalize page text and use it for author last name searches
+		let normText = utils.normalize(page.text);
+		
+		// Gets a list of all resolved titles in the page. It can contain
+		// unique article titles or general titles like "Introduction",
+		// "Materials and methods", etc.
+		let detections = [];
+		for (let normTitle of normTitles) {
+			let detection = await this.db.getDoiByNormTitle(normTitle, normText);
+			if (detection) {
+				detections.push(detection);
+			}
+		}
+		
+		// Filter detected titles that have a high probability to be an actual title.
+		let validatedDetections = [];
+		for (let detection of detections) {
+			if (this.validateDetection(detection)) {
+				validatedDetections.push(detection);
+			}
+		}
+		
+		// Not the final solution, but if an article has a title which resolves to multiple DOIs,
+		// and it's the only resolved title in the page, then we prevent any further lookups
+		if (detections.length === 1 && detections[0].status === 'multi') {
+			return null;
+		}
+		
+		// Make sure only one title passed validation, and there are no more than 5 detections in the page
+		if (validatedDetections.length === 1 && detections.length <= 5) {
+			return validatedDetections[0].doi;
+		}
 	}
 	return null;
+};
+
+/**
+ * Makes sure that the title is long enough or author(s) are detected in the same page
+ * @param detection
+ * @return {boolean}
+ */
+Title.prototype.validateDetection = function (detection) {
+	if (detection.status !== 'single') return false;
+	
+	// If title is long enough, we can skip authors validation,
+	// but we need to make sure the page isn't listing other article titles
+	if (detection.title.length >= 50) {
+		return true;
+	}
+	// If at least 30, at least one author is required
+	else if (detection.title.length >= 30) {
+		if (detection.authorsDetected >= 1) {
+			return true;
+		}
+	}
+	// If less than 30, title is too short, and it must match all provided authors
+	else if (
+		// Both authors are detected
+		detection.authorsDetected >= 2 ||
+		// Or one author detected, if only one exists
+		detection.authorsDetected === 1 && detection.authorsCount === 1
+	) {
+		return true;
+	}
 };

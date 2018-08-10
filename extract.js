@@ -33,36 +33,8 @@ const Extract = function (options) {
 module.exports = Extract;
 
 Extract.prototype.isbn = function (text) {
-	let isbns = [];
-	let rx = /(SBN|sbn)[ \u2014\u2013\u2012-]?(10|13)?[: ]*([0-9X][0-9X \u2014\u2013\u2012-]+)/g;
-	let m;
-	while (m = rx.exec(text)) {
-		let isbn = m[3].replace(/[^0-9X]/gi, '');
-		
-		// If ISBN-10 or ISBN-13 is found
-		if (isbn.length === 10 || isbn.length === 13) {
-			isbns.push(isbn);
-			continue;
-		}
-		
-		// Sometimes ISBN aren't separated with space
-		// If two ISBN-10 or two ISBN-13 detected
-		if (isbn.length === 20 || isbn.length === 26) {
-			// Just slice the first one
-			isbns.push(isbn.slice(0, isbn.length / 2));
-			continue;
-		}
-		
-		// If mixed ISBN-10 and ISBN-13 pair found, we don't know what is the length of the first one
-		if (isbn.length === 23) {
-			// Slice both ISBNs, validate, and one of them should be correct
-			let isbn13 = isbn.slice(0, 13);
-			let isbn10 = isbn.slice(0, 10);
-			if (utils.isValidIsbn(isbn13)) isbns.push(isbn13);
-			if (utils.isValidIsbn(isbn10)) isbns.push(isbn10);
-		}
-	}
-	
+	let isbns = utils.extractIsbns(text);
+
 	// Return the first found ISBN, but only if no more than 3 ISBNs are found.
 	// Sometimes books have three correct ISBNs i.e. ISBN-10, ISBN-13, e-ISBN,
 	// but if there are more than three of them, it definitely means that the
@@ -119,32 +91,6 @@ Extract.prototype.issue = function (text) {
 };
 
 /**
- * Sometimes DOI extraction results in incorrect DOI because
- * it was in round or square brackets. But DOI can have brackets too.
- * This function analyses opening and closing brackets and detects
- * where is the actual end of the DOI
- * i.e "(10.1016/s1474-5151(03)00108-7)" is extracted as "10.1016/s1474-5151(03)00108-7)"
- * and this functions fixes it to "10.1016/s1474-5151(03)00108-7"
- * @param text
- * @return {string}
- */
-Extract.prototype.cleanInvalidParentheses = function (text) {
-	let text2 = '';
-	let depth = 0;
-	for (let c of text) {
-		if ([']', ')'].includes(c)) {
-			depth--;
-			if (depth < 0) break;
-		}
-		if (['[', '('].includes(c)) {
-			depth++;
-		}
-		text2 += c;
-	}
-	return text2;
-};
-
-/**
  * Extract DOI from document text
  * @param doc
  * @return {Promise<*>}
@@ -162,18 +108,11 @@ Extract.prototype.doi = async function (doc) {
 		text += '\n' + doc.pages[1].text;
 	}
 	
-	let m = text.match(/10.\d{4,9}\/[^\s]*[^\s\.,]/g);
-	if (!m) return null;
+	let dois = utils.extractDois(text);
 	
-	for (let doi of m) {
-		// Clean "10.1016/s1474-5151(03)00108-7)"
-		doi = this.cleanInvalidParentheses(doi);
-		
-		// ASCII letters in DOI are case insensitive
-		doi = doi.split('').map(c => (c >= 'A' && c <= 'Z') ? c.toLowerCase() : c).join('');
-		
-		return doi;
-	}
+	// Make sure only one DOI is found, otherwise we don't know which one is the correct one
+	if (dois.length === 1) return dois[0];
+	
 	return null;
 };
 
