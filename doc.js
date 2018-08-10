@@ -27,6 +27,9 @@ const Lbs = require('./lbs');
 
 const Doc = function () {
 	this.lbs = new Lbs();
+	
+	// Client should only send up to 5 pages
+	this.maxPages = 5;
 };
 
 module.exports = Doc;
@@ -46,9 +49,11 @@ module.exports = Doc;
  * @return {object}
  */
 Doc.prototype.getDoc = function (json) {
+	json.pages = json.pages.slice(0, this.maxPages);
+	
 	let doc = {text: '', pages: []};
 	
-	if (!json.totalPages) return null;
+	if (!json.totalPages || json.totalPages < json.pages.length) return null;
 	
 	doc.totalPages = json.totalPages;
 	
