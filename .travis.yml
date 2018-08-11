@@ -7,7 +7,7 @@ dist: trusty
 language: shell
 install:
   - pip install --user awscli
-  - aws s3 cp s3://zotero-recognizer/data/db.tar.gz ./
+  - aws s3 cp s3://zotero-recognizer/data/$(aws s3 ls s3://zotero-recognizer/data/ | grep "db-" | sort | tail -n 1 | awk '{print $4}') ./db.tar.gz
   - aws s3 cp s3://zotero-recognizer/data/pdftest-data.tar.gz ./
   - unset AWS_ACCESS_KEY_ID
   - unset AWS_SECRET_ACCESS_KEY
