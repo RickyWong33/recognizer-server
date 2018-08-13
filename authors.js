@@ -10,6 +10,13 @@ const Authors = function (options) {
 
 module.exports = Authors;
 
+Authors.prototype.fixCapitalization = function (text) {
+	if (text.toUpperCase() === text) {
+		text = text.toLowerCase().replace(/\b[a-z]/g, m => m[0].toUpperCase());
+	}
+	return text;
+};
+
 /**
  * Test if a given author name is a degree or an other forbidden word
  * @param text
@@ -283,6 +290,12 @@ Authors.prototype.extractFromStringType1 = async function (chars) {
 		lastName = author.pop();
 		firstName = author.join(' ');
 		
+		// Title-case all author names, but only if the last name is in uppercase
+		if (lastName.toUpperCase() === lastName) {
+			firstName = this.fixCapitalization(firstName);
+			lastName = this.fixCapitalization(lastName);
+		}
+		
 		result.push({firstName, lastName});
 	}
 	
@@ -339,6 +352,12 @@ Authors.prototype.extractFromStringType2 = async function (str) {
 		let lastName;
 		lastName = author.pop();
 		firstName = author.join(' ');
+		
+		// Title-case all author names, but only if the last name is in uppercase
+		if (lastName.toUpperCase() === lastName) {
+			firstName = this.fixCapitalization(firstName);
+			lastName = this.fixCapitalization(lastName);
+		}
 		
 		result.push({firstName, lastName});
 	}
@@ -442,6 +461,13 @@ Authors.prototype.getAuthors = async function (lb) {
 			}
 			
 			firstName = author.join(' ');
+			
+			// Title-case all author names, but only if the last name is in uppercase
+			if (lastName.toUpperCase() === lastName) {
+				firstName = this.fixCapitalization(firstName);
+				lastName = this.fixCapitalization(lastName);
+			}
+			
 			result.push({firstName, lastName});
 		}
 	}
