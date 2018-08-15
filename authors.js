@@ -12,7 +12,7 @@ module.exports = Authors;
 
 Authors.prototype.fixCapitalization = function (text) {
 	if (text.toUpperCase() === text) {
-		text = text.toLowerCase().replace(/\b[a-z]/g, m => m[0].toUpperCase());
+		text = XRegExp.replace(text.toLowerCase(), XRegExp('(^|[^\\pL])\\pL', 'g'), m => m.toUpperCase());
 	}
 	return text;
 };
