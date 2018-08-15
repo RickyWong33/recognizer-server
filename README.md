@@ -61,8 +61,7 @@ node add-test-report.js /path/to/report.json
 ```
 
 
-Reset specified tests. Useful when i.e. a new field is added and need to update multiple tests.
-Supports multiple multiple tests:
+Reset specified tests. Useful when i.e. a new field is added and need to update multiple tests:
 ```
 node reset-test.js 007
 node reset-test.js 007 014 028
