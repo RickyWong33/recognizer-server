@@ -71,6 +71,11 @@ exports.pdfToJson = function (pdfFile) {
 	return JSON.parse(json);
 };
 
+exports.getAllIds = function (dir) {
+	let files = fs.readdirSync(dir);
+	return files.sort().filter(x => x.slice(-8) === '-in.json').map(x => x.slice(0, 3));
+};
+
 exports.getNextId = function (dir) {
 	let files = fs.readdirSync(dir);
 	

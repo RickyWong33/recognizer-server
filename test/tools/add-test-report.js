@@ -15,7 +15,7 @@ async function main() {
 	content = content.json;
 	
 	let res = await utils.query(content);
-	res.timeMs = undefined;
+	delete res.timeMs;
 	console.log(res);
 	
 	let id = utils.getNextId(path.resolve(__dirname, '../pdftest-data'));
