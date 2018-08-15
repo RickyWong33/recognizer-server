@@ -182,8 +182,8 @@ exports.extractIsbns = function (text) {
 			// Slice both ISBNs, validate, and one of them should be correct
 			let isbn13 = isbn.slice(0, 13);
 			let isbn10 = isbn.slice(0, 10);
-			if (utils.isValidIsbn(isbn13)) isbns.push(isbn13);
-			if (utils.isValidIsbn(isbn10)) isbns.push(isbn10);
+			if (exports.isValidIsbn(isbn13)) isbns.push(isbn13);
+			if (exports.isValidIsbn(isbn10)) isbns.push(isbn10);
 		}
 	}
 	
