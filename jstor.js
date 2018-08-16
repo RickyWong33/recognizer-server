@@ -127,47 +127,58 @@ Jstor.prototype.extract = function (page) {
 	}
 	else {
 		result.type = 'journal-article';
-		if (m = /((?:\n|.)*)\nAuthor\(s\): (.*)\nReview by: (.*)\nSource: (.*)\n/.exec(text)) {
+		if (m = /((?:\n|.)*)\nAuthor\(s\): (.*)\nReview by: (.*)\nSource: (.*?)\n(Published by:|Stable URL:)/s.exec(text)) {
 			result.title = m[1];
 			authors = m[3];
 			source = m[4];
 		}
-		else if (m = /((?:\n|.)*)\nAuthor\(s\): (.*)\nSource: (.*)\n/.exec(text)) {
+		else if (m = /((?:\n|.)*)\nAuthor\(s\): (.*)\nSource: (.*?)\n(Published by:|Stable URL:)/s.exec(text)) {
 			result.title = m[1];
 			authors = m[2];
 			source = m[3];
 		}
-		else if (m = /((?:\n|.)*)\nReview by: (.*)\nSource: (.*)\n/.exec(text)) {
+		else if (m = /((?:\n|.)*)\nReview by: (.*)\nSource: (.*?)\n(Published by:|Stable URL:)/s.exec(text)) {
 			result.title = m[1];
 			authors = m[2];
 			source = m[3];
 		}
-		else if (m = /((?:\n|.)*)\nSource: (.*)\n/.exec(text)) {
+		else if (m = /((?:\n|.)*)\nSource: (.*?)\n(Published by:|Stable URL:)/s.exec(text)) {
 			result.title = m[1];
 			source = m[2];
 		}
 	}
 	
+	if (authors) authors = authors.replace(/\n/g, ' ');
+	if (result.title) result.title = result.title.replace(/\n/g, ' ');
+	if (source) source = source.replace(/\n/g, ' ');
+	
 	if (authors) {
+		let fullnames = [];
 		let s = 0;
 		let e;
 		while (1) {
 			e = authors.indexOf(', ', s);
 			if (e >= 0) {
-				result.authors.push({lastName: authors.slice(s, e)});
+				fullnames.push(authors.slice(s, e));
 				s = e + 2;
 				continue;
 			}
 			
 			e = authors.indexOf(' and ', s);
 			if (e >= 0) {
-				result.authors.push({lastName: authors.slice(s, e)});
+				fullnames.push(authors.slice(s, e));
 				s = e + 5;
 				continue;
 			}
 			
-			result.authors.push({lastName: authors.slice(s)});
+			fullnames.push(authors.slice(s));
 			break;
+		}
+		
+		for (let fullname of fullnames) {
+			let names = fullname.split(' ');
+			if (names.length < 2) continue;
+			result.authors.push({firstName: names.slice(0, -1).join(' '), lastName: names.slice(-1)[0]})
 		}
 	}
 	
