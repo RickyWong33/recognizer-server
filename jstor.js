@@ -153,28 +153,7 @@ Jstor.prototype.extract = function (page) {
 	if (source) source = source.replace(/\n/g, ' ');
 	
 	if (authors) {
-		let fullnames = [];
-		let s = 0;
-		let e;
-		while (1) {
-			e = authors.indexOf(', ', s);
-			if (e >= 0) {
-				fullnames.push(authors.slice(s, e));
-				s = e + 2;
-				continue;
-			}
-			
-			e = authors.indexOf(' and ', s);
-			if (e >= 0) {
-				fullnames.push(authors.slice(s, e));
-				s = e + 5;
-				continue;
-			}
-			
-			fullnames.push(authors.slice(s));
-			break;
-		}
-		
+		let fullnames = authors.split(/, | and /);
 		for (let fullname of fullnames) {
 			let names = fullname.split(' ');
 			if (names.length < 2) continue;
