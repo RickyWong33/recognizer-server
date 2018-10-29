@@ -1,6 +1,6 @@
 {
   "name": "recognizer-server",
-  "version": "0.0.1",
+	"version": "2.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,7 @@
   "license": "AGPL-3.0",
   "dependencies": {
     "aws-sdk": "^2.206.0",
-    "cld": "^2.4.8",
+		"cld": "git+https://git@github.com/mrtcode/node-cld#931f6e6",
     "config": "^1.29.4",
     "int64-buffer": "^0.1.10",
     "koa": "^2.5.0",
@@ -21,12 +21,12 @@
     "koa-compress": "^2.0.0",
     "koa-router": "^7.4.0",
     "moment": "^2.21.0",
+		"mysql2": "^1.6.1",
     "node-statsd": "^0.1.1",
-    "sqlite": "^2.9.1",
+		"serverless-http": "^1.7.2",
     "winston": "^2.4.0",
     "xregexp": "^4.1.1",
-    "xxhash": "^0.2.4",
-    "zlib": "^1.0.5"
+		"xxhash": "^0.2.4"
   },
   "devDependencies": {
     "chai": "^4.1.2",

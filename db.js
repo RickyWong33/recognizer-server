@@ -23,10 +23,13 @@
  ***** END LICENSE BLOCK *****
  */
 
-const sqlite = require('sqlite');
 const XXHash = require('xxhash');
 const Int64LE = require("int64-buffer").Int64LE;
+const mysql2Promise = require('mysql2/promise');
+const config = require('config');
 const utils = require('./utils');
+
+var mysql;
 
 const Db = function () {
 
@@ -39,9 +42,9 @@ module.exports = Db;
  * @return {Promise<void>}
  */
 Db.prototype.init = async function () {
-	this.doidata = await sqlite.open('./db/doidata.sqlite', {Promise});
-	this.word = await sqlite.open('./db/word.sqlite', {Promise});
-	this.journal = await sqlite.open('./db/journal.sqlite', {Promise});
+	if (!mysql) {
+		mysql = await mysql2Promise.createConnection(config.get('mysql'));
+	}
 };
 
 /**
@@ -55,8 +58,8 @@ Db.prototype.journalExists = async function (journal) {
 	journal = utils.normalize(journal);
 	let hash = XXHash.hash64(new Buffer(journal), 0, 'buffer');
 	hash = Int64LE(hash).toString();
-	let stmt = await this.journal.prepare('SELECT 1 FROM journal WHERE hash = CAST(? AS INTEGER) LIMIT 1', [hash]);
-	return !!await stmt.get();
+	let res = await mysql.query('SELECT * FROM journal WHERE hash = ? LIMIT 1', [hash]);
+	return !!res[0].length;
 };
 
 /**
@@ -66,7 +69,7 @@ Db.prototype.journalExists = async function (journal) {
  * a - how common between titles
  * b - how common between first names
  * c - how common between last names
- * This allows to identify is the word is more likely to be a general word or an author name
+ * This allows to identify if the word is more likely to be a general word or an author name
  * @param word
  * @return {Promise<*>}
  */
@@ -74,8 +77,8 @@ Db.prototype.getWord = async function (word) {
 	word = utils.normalize(word);
 	let hash = XXHash.hash64(new Buffer(word), 0, 'buffer');
 	hash = Int64LE(hash).toString();
-	let stmt = await this.word.prepare('SELECT a, b, c FROM word WHERE hash = ? LIMIT 1', [hash]);
-	return await stmt.get();
+	let res = await mysql.query('SELECT a, b, c FROM word WHERE hash = ? LIMIT 1', [hash]);
+	return res[0][0];
 };
 
 /**
@@ -93,12 +96,11 @@ Db.prototype.getDoiByNormTitle = async function (title, text) {
 	let title_hash = XXHash.hash64(new Buffer(title), 0, 'buffer');
 	title_hash = Int64LE(title_hash).toString();
 	
-	let stmt = await this.doidata.prepare('SELECT * FROM doidata WHERE title_hash = ? LIMIT 2', [title_hash]);
-	let row1 = await stmt.get();
+	let res = await mysql.query('SELECT * FROM doidata WHERE title_hash = ? LIMIT 2', [title_hash]);
+	if (!res[0].length) return null;
 	
-	if (!row1) return null;
-	
-	let row2 = await stmt.get();
+	let row1 = res[0][0];
+	let row2 = res[0][1];
 	
 	// If more than one row encountered we can't reliably distinguish which one is the right one,
 	// therefore it's better to avoid resolving this title to DOI. But it's still important to inform

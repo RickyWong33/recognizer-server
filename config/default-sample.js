@@ -16,5 +16,11 @@ module.exports = {
 	statsD: {
 		host: '',
 		port: 8125
+	},
+	mysql: {
+		host: '',
+		user: '',
+		password: '',
+		database: ''
 	}
 };

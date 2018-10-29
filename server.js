@@ -35,6 +35,8 @@ const bodyParser = require('koa-bodyparser');
 const log = require('./log');
 const statsD = require('./statsd');
 const Recognizer = require('./recognizer');
+const serverless = require('serverless-http');
+
 
 const s3Client = new AWS.S3(config.get('s3'));
 const recognizer = new Recognizer();
@@ -92,19 +94,6 @@ app.use(async function (ctx, next) {
 
 app.use(bodyParser());
 
-/**
- * A middleware to use gzip compression if the file is compressible
- * e.g. has text/html, text/css or similar 'text' content-type,
- * and is at least 2048 bytes size
- */
-app.use(compress({
-	filter: function (content_type) {
-		return /text/i.test(content_type)
-	},
-	threshold: 2048,
-	flush: require('zlib').Z_SYNC_FLUSH
-}));
-
 router.post('/recognize', async function (ctx) {
 	let json = ctx.request.body;
 	let t = Date.now();
@@ -135,51 +124,62 @@ app
 	.use(router.routes())
 	.use(router.allowedMethods());
 
-
-process.on('SIGTERM', function () {
-	log.warn("Received SIGTERM");
-	shutdown();
-});
-
-process.on('SIGINT', function () {
-	log.warn("Received SIGINT");
-	shutdown();
-});
-
-process.on('uncaughtException', function (err) {
-	log.error("Uncaught exception:", err);
-	shutdown();
-});
-
-process.on("unhandledRejection", function (reason, promise) {
-	log.error('Unhandled Rejection at:', promise, 'reason:', reason);
-	shutdown();
-});
-
-function shutdown() {
-	log.info('Shutting down');
-	//...
-	log.info('Exiting');
-	process.exit();
+// If running on Lambda
+if (process.env.LAMBDA_TASK_ROOT) {
+	module.exports.handler = async function (event, context) {
+		await recognizer.init();
+		return await new Promise(function (resolve, reject) {
+			serverless(app)(event, context, function (err, res) {
+				if (err) return reject(err);
+				resolve(res);
+			});
+		})
+	};
 }
-
-// Client connection errors
-app.on('error', function (err, ctx) {
-	log.debug('App error: ', err, ctx);
-	log.info('client error: %s %s', ctx.ip, err.message);
-});
-
-module.exports = async function (callback) {
-	
-	await recognizer.init();
-	
-	log.info("Starting recognizer-server [pid: " + process.pid + "] on port " + config.get('port'));
-	await new Promise(function (resolve, reject) {
-		let server = app.listen(config.get('port'), function (err) {
-			if (err) return reject(err);
-			resolve();
-		});
-		// Set a timeout for disconnecting inactive clients
-		server.setTimeout(config.get('connectionTimeout') * 1000);
+else {
+	// Client connection errors
+	app.on('error', function (err, ctx) {
+		log.debug('App error: ', err, ctx);
+		log.info('client error: %s %s', ctx.ip, err.message);
 	});
-};
+	
+	process.on('SIGTERM', function () {
+		log.warn("Received SIGTERM");
+		shutdown();
+	});
+	
+	process.on('SIGINT', function () {
+		log.warn("Received SIGINT");
+		shutdown();
+	});
+	
+	process.on('uncaughtException', function (err) {
+		log.error("Uncaught exception:", err);
+		shutdown();
+	});
+	
+	process.on("unhandledRejection", function (reason, promise) {
+		log.error('Unhandled Rejection at:', promise, 'reason:', reason);
+		shutdown();
+	});
+	
+	function shutdown() {
+		log.info('Shutting down');
+		//...
+		log.info('Exiting');
+		process.exit();
+	}
+	
+	module.exports = async function () {
+		await recognizer.init();
+		log.info("Starting recognizer-server [pid: " + process.pid + "] on port " + config.get('port'));
+		await new Promise(function (resolve, reject) {
+			let server = app.listen(config.get('port'), function (err) {
+				if (err) return reject(err);
+				resolve();
+			});
+			// Set a timeout for disconnecting inactive clients
+			server.setTimeout(config.get('connectionTimeout') * 1000);
+		});
+	};
+}
