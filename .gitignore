@@ -1,3 +1,4 @@
-node_modules
-db
 !.gitignore
+node_modules
+lambda_config*.env
+db
