@@ -6,7 +6,10 @@ exports.handler = async function (event) {
 	let params = {
 		FunctionName: process.env.FUNCTION_MAIN,
 		InvocationType: 'RequestResponse',
-		Payload: JSON.stringify(event)
+		Payload: JSON.stringify({
+			type: 'API_GATEWAY',
+			body: event
+		})
 	};
 	
 	let result = await Lambda.invoke(params).promise();

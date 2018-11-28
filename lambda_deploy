@@ -17,6 +17,13 @@ cp -R node_modules package/
 cp *.js package/
 cp -R config package/
 
+mkdir package/pdftools
+cp pdftools/pdftotext-linux-x86_64 package/pdftools/
+cp -R pdftools/poppler-data package/pdftools/
+
+# Cut over 100 MB of redundant files
+rm -rf package/node_modules/cld/deps
+
 j2 "$dir/lambda_template.yaml.j2" > "$dir/package/template.yaml"
 
 sam package --template-file "$dir/package/template.yaml" --s3-bucket $deployment_bucket_name --output-template-file "$dir/package/package.yaml"

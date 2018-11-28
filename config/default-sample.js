@@ -6,7 +6,14 @@ module.exports = {
 	port: 8003,
 	// Client connection inactivity timeout in seconds
 	connectionTimeout: 3,
-	s3: {
+	s3Report: {
+		params: {
+			Bucket: ''
+		},
+		accessKeyId: '',
+		secretAccessKey: ''
+	},
+	s3Upload: {
 		params: {
 			Bucket: ''
 		},

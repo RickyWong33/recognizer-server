@@ -35,12 +35,12 @@ const bodyParser = require('koa-bodyparser');
 const log = require('./log');
 const statsD = require('./statsd');
 const Recognizer = require('./recognizer');
+const PdfProcessor = require('./pdf-processor');
 const serverless = require('serverless-http');
 
-
-const s3Client = new AWS.S3(config.get('s3'));
+const s3ReportClient = new AWS.S3(config.get('s3Report'));
 const recognizer = new Recognizer();
-
+const pdfProcessor = new PdfProcessor({s3: config.get('s3Upload')});
 
 const app = new Koa();
 app.proxy = true;
@@ -109,7 +109,7 @@ router.post('/recognize', async function (ctx) {
 });
 
 router.post('/report', async function (ctx) {
-	let res = await s3Client.upload({
+	let res = await s3ReportClient.upload({
 		Key: 'reports/' + (new Date().toISOString()) + '.json',
 		Body: JSON.stringify(ctx.request.body, null, 2),
 	}).promise();
@@ -128,12 +128,30 @@ app
 if (process.env.LAMBDA_TASK_ROOT) {
 	module.exports.handler = async function (event, context) {
 		await recognizer.init();
-		return await new Promise(function (resolve, reject) {
-			serverless(app)(event, context, function (err, res) {
-				if (err) return reject(err);
-				resolve(res);
+		
+		// recognizer Lambda function can be triggered by API Gateway
+		// or by internal Lambda invocation
+		if (event.type === 'API_GATEWAY') {
+			return await new Promise(function (resolve, reject) {
+				serverless(app)(event.body, context, function (err, res) {
+					if (err) return reject(err);
+					resolve(res);
+				});
 			});
-		})
+		}
+		else if (event.type === 'INTERNAL') {
+			if (event.body.action === 'recognizeUpload') {
+				let json = await pdfProcessor.extract(event.body.uploadID);
+				let t = Date.now();
+				let res = await recognizer.recognize(json);
+				if (!res) res = {};
+				let recognitionTime = Date.now() - t;
+				res.timeMs = recognitionTime;
+				statsD.timing('recognition_time', recognitionTime);
+				log.debug('request processed in %dms', recognitionTime);
+				return res;
+			}
+		}
 	};
 }
 else {
