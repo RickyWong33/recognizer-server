@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "test": "NODE_ENV=test ./node_modules/mocha/bin/mocha",
-    "pdftest": "NODE_ENV=test ./node_modules/mocha/bin/mocha test/pdftest.js --exit"
+    "pdftest": "NODE_ENV=test ./node_modules/mocha/bin/mocha test/pdftest.js --exit",
+    "postinstall": "bash -c \"[[ -d pdftools ]] || ./fetch_pdftools\""
   },
   "author": "Martynas Bagdonas",
   "license": "AGPL-3.0",

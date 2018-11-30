@@ -49,10 +49,10 @@ exports.pdfToJson = function (pdfFile) {
 		}
 	}
 	
-	let exec = spawnSync(path.resolve(__dirname, 'pdftools/pdftotext-' + platform), [
+	let exec = spawnSync(path.resolve(__dirname, '../pdftools/pdftotext-' + platform), [
 		'-json',
 		'-l', pages,
-		'-datadir', path.resolve(__dirname, 'pdftools/poppler-data'),
+		'-datadir', path.resolve(__dirname, '../pdftools/poppler-data'),
 		pdfFile,
 		tmpFile.name
 	]);
