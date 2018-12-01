@@ -13,6 +13,8 @@ Resources:
       MemorySize: 128
       Timeout: 30
       Policies:
+        - S3ReadPolicy:
+           BucketName: {{ upload_bucket_name }}
         - LambdaInvokePolicy:
            FunctionName: {{ function_main }}
       Events:
@@ -50,3 +52,22 @@ Resources:
       GroupName: {{ security_group_name }}
       GroupDescription: Lambda to recognize PDF metadata
       VpcId: {{ vpc_id }}
+  UploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: {{ upload_bucket_name }}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: Purge After 1 Day
+            ExpirationInDays: 1
+            Status: Enabled
+Outputs:
+  RecognizerUploadBucketArn:
+    Value:
+      Fn::GetAtt: [ UploadBucket, Arn ]
+    Export:
+      Name: RecognizerUploadBucketArn
