@@ -137,12 +137,14 @@ if (process.env.LAMBDA_TASK_ROOT) {
 			for (let header in event.body.headers) {
 				if (header.toLowerCase() === 'content-encoding') {
 					delete event.body.headers[header];
+					break;
 				}
 			}
 			
 			for (let header in event.body.multiValueHeaders) {
 				if (header.toLowerCase() === 'content-encoding') {
 					delete event.body.multiValueHeaders[header];
+					break;
 				}
 			}
 			
