@@ -132,6 +132,20 @@ if (process.env.LAMBDA_TASK_ROOT) {
 		// recognizer Lambda function can be triggered by API Gateway
 		// or by internal Lambda invocation
 		if (event.type === 'API_GATEWAY') {
+			// Remove content-encoding header because API GATEWAY already
+			// decodes all the content
+			for (let header in event.body.headers) {
+				if (header.toLowerCase() === 'content-encoding') {
+					delete event.body.headers[header];
+				}
+			}
+			
+			for (let header in event.body.multiValueHeaders) {
+				if (header.toLowerCase() === 'content-encoding') {
+					delete event.body.multiValueHeaders[header];
+				}
+			}
+			
 			return await new Promise(function (resolve, reject) {
 				serverless(app)(event.body, context, function (err, res) {
 					if (err) return reject(err);
