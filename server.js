@@ -148,6 +148,9 @@ if (process.env.LAMBDA_TASK_ROOT) {
 				}
 			}
 			
+			// Strip base path mapping prefix when using a custom domain in API Gateway
+			event.body.path = event.body.path.replace(/^\/recognizer(\-dev)?\//, '/');
+			
 			return await new Promise(function (resolve, reject) {
 				serverless(app)(event.body, context, function (err, res) {
 					if (err) return reject(err);
