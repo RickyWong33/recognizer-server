@@ -2,8 +2,9 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: >-
   Lambda-based PDF metadata recognizer ({{ node_env }})
+
 Resources:
-  Proxy:
+  ProxyFunction:
     Type: 'AWS::Serverless::Function'
     Properties:
       FunctionName: {{ function_proxy }}
@@ -13,8 +14,6 @@ Resources:
       MemorySize: 128
       Timeout: 30
       Policies:
-        - S3ReadPolicy:
-           BucketName: {{ upload_bucket_name }}
         - LambdaInvokePolicy:
            FunctionName: {{ function_main }}
       Events:
@@ -28,7 +27,8 @@ Resources:
         Variables:
           NODE_ENV: {{ node_env }}
           FUNCTION_MAIN: {{ function_main }}
-  Main:
+
+  MainFunction:
     Type: 'AWS::Serverless::Function'
     Properties:
       FunctionName: {{ function_main }}
@@ -39,19 +39,25 @@ Resources:
       Timeout: 30
       Policies:
         - VPCAccessPolicy: {}
+        - S3ReadPolicy:
+           BucketName: !Ref UploadBucket
+        - S3CrudPolicy:
+            BucketName: !Ref ReportBucket
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup
-        SubnetIds: {{ subnet_ids }}
+        SubnetIds: !Split [ ",", !ImportValue PrivateVPCSubnets ]
       Environment:
         Variables:
           NODE_ENV: {{ node_env }}
+
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: {{ security_group_name }}
-      GroupDescription: Lambda to recognize PDF metadata
-      VpcId: {{ vpc_id }}
+      GroupDescription: Lambda to recognize PDF metadata ({{ node_env }})
+      VpcId: !ImportValue VPCID
+
   UploadBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -65,9 +71,35 @@ Resources:
           - Id: Purge After 1 Day
             ExpirationInDays: 1
             Status: Enabled
+
+  ReportBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: {{ report_bucket_name }}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    DeletionPolicy: Delete
+
+  DBSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: PDF Recognizer Lambda ({{ node_env }})
+      GroupId: {{ db_security_group_id }}
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  BasePathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    Properties:
+      BasePath: {{ services_endpoint }}
+      DomainName: !ImportValue ServicesAPIDomainName
+      RestApiId: !Ref ServerlessRestApi
+      Stage: Prod
+
 Outputs:
-  RecognizerUploadBucketArn:
-    Value:
-      Fn::GetAtt: [ UploadBucket, Arn ]
-    Export:
-      Name: RecognizerUploadBucketArn
+  API:
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
